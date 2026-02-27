@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Work Tracker</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #f4f4f9; }
+    .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    input, select, button { width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; }
+    button { background: #28a745; color: white; border: none; cursor: pointer; }
+    button:hover { background: #218838; }
+    .hidden { display: none; }
+    h2 { text-align: center; color: #333; }
+    .stat-box { margin-bottom: 30px; border-top: 1px solid #eee; padding-top: 20px; }
+  </style>
+</head>
+<body>
+
+  <div id="login-view" class="container">
+    <h2>Login</h2>
+    <input type="text" id="username" placeholder="Username">
+    <input type="password" id="password" placeholder="Password">
+    <button onclick="login()">Login</button>
+    <p id="login-msg" style="color:red; text-align:center;"></p>
+  </div>
+
+  <div id="supervisor-view" class="container hidden">
+    <h2>Supervisor Log</h2>
+    <p>Logged in as: <span id="sup-name"></span></p>
+    
+    <label>Worker:</label>
+    <select id="worker-select"></select>
+    
+    <label>Task:</label>
+    <select id="task-select"></select>
+    
+    <label>Hours Worked:</label>
+    <input type="number" id="hours" placeholder="e.g. 8">
+    
+    <button onclick="submitLog()">Submit Log</button>
+    <button onclick="logout()" style="background:#dc3545;">Logout</button>
+  </div>
+
+  <div id="admin-view" class="container hidden">
+    <h2>Admin Statistics</h2>
+    <div class="stat-box">
+      <h3>Hours per Worker</h3>
+      <canvas id="workerChart"></canvas>
+    </div>
+    <div class="stat-box">
+      <h3>Hours per Task</h3>
+      <canvas id="taskChart"></canvas>
+    </div>
+    <button onclick="logout()" style="background:#dc3545;">Logout</button>
+  </div>
+
+  <script>
+    const API_URL = "https://script.google.com/macros/s/AKfycbwa1cL94BnRFx1_NWraKk8tMviy06E3P00efRDPWTFCRGyMxDW5-KUGu0XVI8Qch6MYkg/exec"; 
+    let currentUser = "";
+
+    function login() {
+      const user = document.getElementById('username').value;
+      const pass = document.getElementById('password').value;
+      
+      document.getElementById('login-msg').innerText = "Verifying...";
+      
+      fetch(API_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: 'login', username: user, password: pass })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'success') {
+          currentUser = user;
+          document.getElementById('login-view').classList.add('hidden');
+          if (data.role === 'Admin') {
+            loadStats();
+            document.getElementById('admin-view').classList.remove('hidden');
+          } else {
+            loadLists(); // Load dropdowns for supervisor
+            document.getElementById('supervisor-view').classList.remove('hidden');
+            document.getElementById('sup-name').innerText = user;
+          }
+        } else {
+          document.getElementById('login-msg').innerText = data.message;
+        }
+      });
+    }
+
+    function loadLists() {
+       fetch(API_URL, { method: "POST", body: JSON.stringify({ action: 'getLists' }) })
+       .then(res => res.json())
+       .then(data => {
+          const wSelect = document.getElementById('worker-select');
+          const tSelect = document.getElementById('task-select');
+          wSelect.innerHTML = ""; tSelect.innerHTML = "";
+          
+          data.workers.forEach(w => wSelect.innerHTML += `<option>${w}</option>`);
+          data.tasks.forEach(t => tSelect.innerHTML += `<option>${t}</option>`);
+       });
+    }
+
+    function submitLog() {
+      const worker = document.getElementById('worker-select').value;
+      const task = document.getElementById('task-select').value;
+      const hours = document.getElementById('hours').value;
+
+      fetch(API_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: 'submit', supervisor: currentUser, worker: worker, task: task, hours: hours })
+      }).then(() => {
+        alert("Saved!");
+        document.getElementById('hours').value = "";
+      });
+    }
+
+    function loadStats() {
+      fetch(API_URL, { method: "POST", body: JSON.stringify({ action: 'getStats' }) })
+      .then(res => res.json())
+      .then(data => {
+        renderChart('workerChart', 'Hours by Worker', data.workerStats);
+        renderChart('taskChart', 'Hours by Task', data.taskStats);
+      });
+    }
+
+    function renderChart(canvasId, label, dataObj) {
+      new Chart(document.getElementById(canvasId), {
+        type: 'bar',
+        data: {
+          labels: Object.keys(dataObj),
+          datasets: [{ label: label, data: Object.values(dataObj), backgroundColor: '#36a2eb' }]
+        }
+      });
+    }
+
+    function logout() { location.reload(); }
+  </script>
+</body>
+</html>
